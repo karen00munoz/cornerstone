@@ -4,16 +4,21 @@ import * as cornerstoneMath from "cornerstone-math";
 import * as cornerstoneTools from "cornerstone-tools";
 import Hammer from "hammerjs";
 import * as cornerstoneWebImageLoader from "cornerstone-web-image-loader";
-import { CineDialog } from 'react-viewerbase'
+import cornerstoneWADOImageLoader from "cornerstone-wado-image-loader";
+import { CineDialog } from 'react-viewerbase';
+import dicomParser from "dicom-parser";
 // import { ConnectedCineDialog } from "./components/Cine";
+import file from './404.dcm';
 
 cornerstoneTools.external.cornerstone = cornerstone;
 cornerstoneTools.external.cornerstoneMath = cornerstoneMath;
 cornerstoneWebImageLoader.external.cornerstone = cornerstone;
+cornerstoneWADOImageLoader.external.cornerstone = cornerstone;
+cornerstoneWADOImageLoader.external.dicomParser = dicomParser;
 cornerstoneTools.external.Hammer = Hammer;
 
-const imageId =
-  "https://rawgit.com/cornerstonejs/cornerstoneWebImageLoader/master/examples/Renal_Cell_Carcinoma.jpg";
+const imageId = cornerstoneWADOImageLoader.wadouri.fileManager.add(file);
+console.log(imageId);
 
 const divStyle = {
   width: "512px",
@@ -160,7 +165,7 @@ class CornerstoneElement extends React.Component {
 }
 
 const stack = {
-  imageIds: [imageId, 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxleHBsb3JlLWZlZWR8M3x8fGVufDB8fHx8&w=1000&q=80'],
+  imageIds: [imageId],
   currentImageIdIndex: 0
 };
 
