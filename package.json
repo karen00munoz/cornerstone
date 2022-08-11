@@ -6,7 +6,7 @@
     "@testing-library/jest-dom": "^5.16.5",
     "@testing-library/react": "^13.3.0",
     "@testing-library/user-event": "^13.5.0",
-    "cornerstone-core": "2.1.0",
+    "cornerstone-core": "2.6.0",
     "cornerstone-math": "0.1.6",
     "cornerstone-tools": "2.1.0",
     "cornerstone-web-image-loader": "^2.1.1",
