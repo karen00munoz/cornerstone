@@ -6,7 +6,9 @@ import Hammer from "hammerjs";
 import * as cornerstoneWebImageLoader from "cornerstone-web-image-loader";
 import cornerstoneWADOImageLoader from "cornerstone-wado-image-loader";
 import { CineDialog } from 'react-viewerbase';
+import OHIF from '@ohif/core';
 import dicomParser from "dicom-parser";
+// import cloneDeep from 'lodash.clonedeep';
 // import fs from 'fs';
 // import * as fs from 'fs';
 // import { ConnectedCineDialog } from "./components/Cine";
@@ -25,7 +27,8 @@ cornerstoneTools.external.Hammer = Hammer;
 // });
 // cornerstoneWADOImageLoader.wadouri.fileManager.add(dicomFileAsBuffer)
 
-const imageId = 'dicomweb:http://localhost:3000/403.dcm';
+const url = window.location.origin;
+const imageId = `dicomweb:${url}/404.dcm`;
 
 const divStyle = {
   width: "512px",
@@ -55,6 +58,7 @@ class CornerstoneElement extends React.Component {
       stack: props.stack,
       viewport: cornerstone.getDefaultViewport(null, undefined),
       imageId: props.stack.imageIds[0],
+      initialViewport: {},
     };
 
     this.onImageRendered = this.onImageRendered.bind(this);
@@ -70,6 +74,7 @@ class CornerstoneElement extends React.Component {
           style={divStyle}
           ref={input => {
             this.element = input;
+            element = input;
           }}
         >
           <canvas className="cornerstone-canvas" />
@@ -115,13 +120,61 @@ class CornerstoneElement extends React.Component {
 
     // Load the first image in the stack
     cornerstone.loadImage(this.state.imageId).then(image => {
-      // Display the first image
-      cornerstone.displayImage(element, image);
+      function metaDataProvider(type, imageId) {
+      if (type === 'cineModule') {
+        if (imageId === image.imageId) {
+            return {
+                frameOfReferenceUID: "1.3.6.1.4.1.5962.99.1.2237260787.1662717184.1234892907507.1411.0",
+                rows: 512,
+                columns: 512,
+                rowCosines: {
+                    x: 1,
+                    y: 0,
+                    z: 0
+                },
+                columnCosines: {
+                    x: 0,
+                    y: 1,
+                    z: 0
+                },
+                imagePositionPatient: {
+                    x: -250,
+                    y: -250,
+                    z: -399.100006
+                },
+                rowPixelSpacing: 0.976562,
+                columnPixelSpacing: 0.976562
+            };
+        }
+      }
+    }
+    // Register this provider with CornerstoneJS
+      cornerstone.metaData.addProvider(metaDataProvider);
+      const cine = cornerstone.metaData.get('cineModule',image.imageId);
+      console.log(cine)
 
-      // Add the stack tool state to the enabled element
-      const stack = this.props.stack;
-      cornerstoneTools.addStackStateManager(element, ["stack"]);
-      cornerstoneTools.addToolState(element, "stack", stack);
+      console.log("react-cs: loadAndCacheImage imgframeRate:",this.state,this.initialViewport);
+      cornerstone.displayImage(this.element, image, this.initialViewport);
+//          if (cine.frameTime) {
+      if (true) {
+        let imageIds = [];
+        for(let i=0; i < cine.numFrames; i++) {
+            let frameurl = imageId + "?frame="+i;
+            imageIds.push(frameurl);
+        }
+        let stack = {
+          currentImageIdIndex : 0,
+          imageIds: imageIds
+        };
+        cornerstoneTools.addStackStateManager(this.element, ['stack', 'playClip']);
+        cornerstoneTools.addToolState(this.element, 'stack', stack);
+
+        const data = { frameRate: 1000.0 / cine.cineFrameRate, isPlaying:true, shouldStart:true };
+        console.log("react-cs: loadAndCacheImage setState:",data);
+        console.log("react-cs: playClip:",data.frameRate);
+        debugger;
+        cornerstoneTools.playClip(this.element, data.frameRate);;
+      }
 
       cornerstoneTools.mouseInput.enable(element);
       cornerstoneTools.mouseWheelInput.enable(element);
@@ -133,8 +186,6 @@ class CornerstoneElement extends React.Component {
       cornerstoneTools.touchInput.enable(element);
       cornerstoneTools.panTouchDrag.activate(element);
       cornerstoneTools.zoomTouchPinch.activate(element);
-      cornerstoneTools.playClip(this.element, 1);
-      cornerstoneTools.stopClip(this.element);
 
       element.addEventListener(
         "cornerstoneimagerendered",
@@ -171,35 +222,126 @@ class CornerstoneElement extends React.Component {
   }
 }
 
+let element;
+let isPlaying = false;
+  // element = document.querySelectorAll(".viewportElement");
+  // console.log(element);
+  // for (let i = 0; i < element.length; i++) {
+  //   cornerstone.enable(element[i]);
+  // }
+const setPlayClip = (e) => {
+    cornerstoneTools.playClip(element, 1);
+    isPlaying = true;
+  console.log(cornerstoneTools.playClip(element, 1));
+};
+
+const setStopClip = (e) => {
+    cornerstoneTools.stopClip(element);
+    isPlaying = false;
+};
+
 const stack = {
   imageIds: [imageId],
   currentImageIdIndex: 0
 };
 
 const App = () => {
-  setTimeout(() => {
-  })
-  let element;
-  const [isPlaying, setIsPlaying] = useState(false);
-    element = document.querySelectorAll(".viewportElement");
-    console.log(element);
-    for (let i = 0; i < element.length; i++) {
-      cornerstone.enable(element[i]);
-    }
-  const setPlayClip = (e) => {
-    for (let i = 0; i < element.length; i++) {
-      cornerstoneTools.playClip(element, 1);
-      setIsPlaying(true);
-    }
-    console.log(element);
-  };
+  const [state, setState] = useState({
+    "isPlaying": true,
+    "cineFrameRate": 30,
+    "isLoopEnabled": true,
+    "lastChange": ""
+  });
 
-  const setStopClip = (e) => {
-    for (let i = 0; i < element.length; i++) {
-      cornerstoneTools.stopClip(element);
-      setIsPlaying(false);
+const { setViewportSpecificData } = OHIF.redux.actions;
+
+const onPlayPauseChanged = (isPlaying) => {
+  function metaDataProvider(type, imageId) {
+    if (type === 'cineModule') {
+      if (imageId === stack.imageId) {
+          return {
+              frameOfReferenceUID: "1.3.6.1.4.1.5962.99.1.2237260787.1662717184.1234892907507.1411.0",
+              rows: 512,
+              columns: 512,
+              rowCosines: {
+                  x: 1,
+                  y: 0,
+                  z: 0
+              },
+              columnCosines: {
+                  x: 0,
+                  y: 1,
+                  z: 0
+              },
+              imagePositionPatient: {
+                  x: -250,
+                  y: -250,
+                  z: -399.100006
+              },
+              rowPixelSpacing: 0.976562,
+              columnPixelSpacing: 0.976562
+          };
+      }
     }
-  };
+  }
+// Register this provider with CornerstoneJS
+  cornerstone.metaData.addProvider(metaDataProvider);
+  const cine = cornerstone.metaData.get('cineModule', stack.imageId);
+  cine.isPlaying = isPlaying;
+  console.log(cine);
+
+  cornerstoneTools.playClip(element, state.cineFrameRate);
+
+  // propsFromDispatch.dispatchSetViewportSpecificData(activeViewportIndex, {
+  //   cine,
+  // });
+    setViewportSpecificData(stack.currentImageIdIndex, {
+      cine,
+    });
+};
+
+const onFrameRateChanged = (frameRate) => {
+  function metaDataProvider(type, imageId) {
+    if (type === 'cineModule') {
+      if (imageId === stack.imageId) {
+          return {
+              frameOfReferenceUID: "1.3.6.1.4.1.5962.99.1.2237260787.1662717184.1234892907507.1411.0",
+              rows: 512,
+              columns: 512,
+              rowCosines: {
+                  x: 1,
+                  y: 0,
+                  z: 0
+              },
+              columnCosines: {
+                  x: 0,
+                  y: 1,
+                  z: 0
+              },
+              imagePositionPatient: {
+                  x: -250,
+                  y: -250,
+                  z: -399.100006
+              },
+              rowPixelSpacing: 0.976562,
+              columnPixelSpacing: 0.976562
+          };
+      }
+    }
+  }
+// Register this provider with CornerstoneJS
+  cornerstone.metaData.addProvider(metaDataProvider);
+  const cine = cornerstone.metaData.get('cineModule', stack.imageId);
+  cine.cineFrameRate = frameRate;
+  console.log(cine.cineFrameRate);
+
+  // propsFromDispatch.dispatchSetViewportSpecificData(activeViewportIndex, {
+  //   cine,
+  // });
+    setViewportSpecificData(stack.currentImageIdIndex, {
+    cine,
+  });
+};
   return (
     <div>
       <h2>Cornerstone React Component Example</h2>
@@ -210,14 +352,20 @@ const App = () => {
         Stop
       </button>
       <CineDialog
-        isPlaying={isPlaying}
-        onClickSkipToStart={() => console.log("skip pressed")}
-        onClickSkipToEnd={() => console.log("skip to end pressed")}
-        onClickNextButton={() => console.log("next pressed")}
-        onClickBackButton={() => console.log("back pressed")}
-        onLoopChanged={(value) => console.log("loop changed")}
-        onFrameRateChanged={(value) => console.log("frame rate changed")}
-        onPlayPauseChanged={() => console.log("play pause pressed")}
+        {...state}
+        onClickSkipToStart={() => setState({ lastChange: 'Clicked SkipToStart' })}
+        onClickSkipToEnd={() => setState({ lastChange: 'Clicked SkipToEnd' })}
+        onClickNextButton={() => setState({ lastChange: 'Clicked Next' })}
+        onClickBackButton={() => setState({ lastChange: 'Clicked Back' })}
+        onLoopChanged={(value) => setState({ isLoopEnabled: value })}
+        onFrameRateChanged={(value) => {
+          onFrameRateChanged(value);
+          setState({ cineFrameRate: value })
+        }}
+        onPlayPauseChanged={() => {
+          onPlayPauseChanged(isPlaying);
+          setState({ isPlaying: !state.isPlaying });
+        }}
       />
       <CornerstoneElement stack={{ ...stack }} />
     </div>
