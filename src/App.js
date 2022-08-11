@@ -26,7 +26,6 @@ cornerstoneTools.external.Hammer = Hammer;
 // cornerstoneWADOImageLoader.wadouri.fileManager.add(dicomFileAsBuffer)
 
 const imageId = 'dicomweb:http://localhost:3000/403.dcm';
-console.log(imageId);
 
 const divStyle = {
   width: "512px",
