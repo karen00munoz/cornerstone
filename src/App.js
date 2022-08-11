@@ -7,8 +7,10 @@ import * as cornerstoneWebImageLoader from "cornerstone-web-image-loader";
 import cornerstoneWADOImageLoader from "cornerstone-wado-image-loader";
 import { CineDialog } from 'react-viewerbase';
 import dicomParser from "dicom-parser";
+// import fs from 'fs';
+// import * as fs from 'fs';
 // import { ConnectedCineDialog } from "./components/Cine";
-import file from './404.dcm';
+// import file from './404.dcm';
 
 cornerstoneTools.external.cornerstone = cornerstone;
 cornerstoneTools.external.cornerstoneMath = cornerstoneMath;
@@ -17,7 +19,13 @@ cornerstoneWADOImageLoader.external.cornerstone = cornerstone;
 cornerstoneWADOImageLoader.external.dicomParser = dicomParser;
 cornerstoneTools.external.Hammer = Hammer;
 
-const imageId = cornerstoneWADOImageLoader.wadouri.fileManager.add(file);
+// const fs = require('fs');
+// const dicomFileAsBuffer = fs.readFileSync('404.dcm', {
+//   encoding: 'utf8',
+// });
+// cornerstoneWADOImageLoader.wadouri.fileManager.add(dicomFileAsBuffer)
+
+const imageId = 'dicomweb:http://localhost:3000/403.dcm';
 console.log(imageId);
 
 const divStyle = {
@@ -218,4 +226,3 @@ const App = () => {
 };
 
   export default App;
-  
