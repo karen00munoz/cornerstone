@@ -21,6 +21,7 @@
     "react-scripts": "5.0.1",
     "react-viewerbase": "0.17.6",
     "redux-oidc": "^4.0.0-beta1",
+    "reselect": "^4.1.6",
     "web-vitals": "^2.1.4"
   },
   "scripts": {

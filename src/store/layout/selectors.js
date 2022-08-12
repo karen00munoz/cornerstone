@@ -23,6 +23,7 @@ export const getActiveContexts = createSelector(
       activeContexts.push(activeViewportExtension);
     }
 
+    console.log(activeContexts);
     return activeContexts;
   }
 );

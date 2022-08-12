@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useContext } from "react";
 import * as cornerstone from "cornerstone-core";
 import * as cornerstoneMath from "cornerstone-math";
 import * as cornerstoneTools from "cornerstone-tools";
@@ -6,11 +6,11 @@ import Hammer from "hammerjs";
 import * as cornerstoneWebImageLoader from "cornerstone-web-image-loader";
 import cornerstoneWADOImageLoader from "cornerstone-wado-image-loader";
 import { CineDialog } from 'react-viewerbase';
-import { OHIF, CommandsManager } from '@ohif/core';
+import OHIF from '@ohif/core';
 import dicomParser from "dicom-parser";
 import cloneDeep from 'lodash.clonedeep';
-import store from './store';
-import { getActiveContexts } from './store/layout/selectors.js';
+// import store from './store';
+// import { getActiveContexts } from './store/layout/selectors.js';
 // import cloneDeep from 'lodash.clonedeep';
 // import fs from 'fs';
 // import * as fs from 'fs';
@@ -332,6 +332,9 @@ const App = () => {
       cornerstone.metaData.addProvider(metaDataProvider);
       const cine = cornerstone.metaData.get('cineModule', stack.imageId);
       cine.isPlaying = state.isPlaying;
+      console.log(element);
+      cornerstone.invalidate(element);
+      cornerstone.draw(element);
     };
 
     const setStopClip = (e) => {
@@ -341,7 +344,7 @@ const App = () => {
       cine.isPlaying = state.isPlaying;
     };
 
-    const onPlayPauseChanged = (isPlaying) => {
+    const onPlayPauseChanged = () => {
     // Register this provider with CornerstoneJS
     setTimeout(() => {
       const viewport = {
@@ -361,30 +364,24 @@ const App = () => {
       setViewportSpecificData(element, viewport)
       cornerstone.metaData.addProvider(metaDataProvider);
       const cine = cornerstone.metaData.get('cineModule', stack.imageId);
-      const commandsManagerConfig = {
-        getAppState: () => store.getState(),
-        getActiveContexts: () => getActiveContexts(store.getState()),
-      };
-      const commandsManager = new CommandsManager(commandsManagerConfig);
-      commandsManager.runCommand('getActiveViewportEnabledElement');
-  
       const cineData = cine || {
         isPlaying: true,
         cineFrameRate: 30,
       };
-  
-      cornerstone.metaData.addProvider(metaDataProvider);
       const cin = cloneDeep(cineData);
-      cin.isPlaying = isPlaying;
-      console.log(cin);
-  
-      cornerstoneTools.playClip(element, state.cineFrameRate);
+      cin.isPlaying = !state.isPlaying;
+      console.log(state.isPlaying);
       // propsFromDispatch.dispatchSetViewportSpecificData(activeViewportIndex, {
       //   cine,
       // });
         setViewportSpecificData(stack.currentImageIdIndex, {
           cin,
         });
+        console.log(
+          setViewportSpecificData(stack.currentImageIdIndex, {
+          cin,
+        })
+        )
     }, 500);
     };
 
@@ -403,10 +400,21 @@ const App = () => {
     });
   };
 
+  let AppContext = React.createContext({});
+
+  const useAppContext = () => useContext(AppContext);
+
+
+  const { appConfig, activeContexts } = useAppContext();
+
   return (
     <div>
       <h2>Cornerstone React Component Example</h2>
-      <button onClick={() => setPlayClip()} style={{ marginLeft: "10px" }}>
+      <button onClick={() => {
+        setPlayClip();
+        }}
+        style={{ marginLeft: "10px" }}
+      >
         Play
       </button>
       <button onClick={() => setStopClip()} style={{ marginLeft: "10px" }}>
@@ -424,24 +432,26 @@ const App = () => {
           setState({ cineFrameRate: value });
         }}
         onPlayPauseChanged={() => {
-          onPlayPauseChanged(state.isPlaying);
           setState({ isPlaying: !state.isPlaying });
+          onPlayPauseChanged();
         }}
       />
       <CornerstoneElement
-      key={0}
-      style={{ minWidth: '50%', height: '256px', flex: '1' }}
-      tools={State.tools}
-      imageIds={State.imageIds}
-      imageIdIndex={State.imageIdIndex}
-      isPlaying={State.isPlaying}
-      frameRate={State.frameRate}
-      className={State.activeViewportIndex === 0 ? 'active' : ''}
-      activeTool={State.activeTool}
-      setViewportActive={() => {
-        State.activeViewportIndex = 0;
-      }}
-      stack={{ ...stack }}
+        key={0}
+        style={{ minWidth: '50%', height: '256px', flex: '1' }}
+        tools={State.tools}
+        imageIds={State.imageIds}
+        imageIdIndex={State.imageIdIndex}
+        isPlaying={State.isPlaying}
+        frameRate={State.frameRate}
+        className={State.activeViewportIndex === 0 ? 'active' : ''}
+        activeTool={State.activeTool}
+        setViewportActive={() => {
+          State.activeViewportIndex = 0;
+        }}
+        appConfig={appConfig}
+        activeContexts={activeContexts}
+        stack={{ ...stack }}
       />
     </div>
   );

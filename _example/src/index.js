@@ -82,7 +82,7 @@ const sopClassHandlerModule = {
       wadoUri: instance.getData().wadouri,
       SOPInstanceUID: instance.getSOPInstanceUID(),
       SeriesInstanceUID: series.getSeriesInstanceUID(),
-      StudyInstanceUID: study.getStudyInstanceUID(),
+      StudyInstanceUID: .getStudyInstanceUID(),
       authorizationHeaders,
     };
   },
