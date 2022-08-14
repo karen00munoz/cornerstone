@@ -13,8 +13,18 @@ cornerstoneTools.external.cornerstoneMath = cornerstoneMath;
 cornerstoneWebImageLoader.external.cornerstone = cornerstone;
 cornerstoneWADOImageLoader.external.cornerstone = cornerstone;
 cornerstoneWADOImageLoader.external.dicomParser = dicomParser;
+cornerstoneWADOImageLoader.webWorkerManager.initialize({
+  maxWebWorkers: navigator.hardwareConcurrency || 1,
+  startWebWorkersOnDemand: true,
+  taskConfiguration: {
+    decodeTask: {
+      initializeCodecsOnStartup: false,
+      usePDFJS: false,
+      strict: false,
+    },
+  },
+});
 cornerstoneTools.external.Hammer = Hammer;
-var loaded = false;
 
 cornerstoneWADOImageLoader.configure({
   beforeSend: function(xhr) {
@@ -24,9 +34,24 @@ cornerstoneWADOImageLoader.configure({
 });
 
 const divStyle = {
-  width: "512px",
-  height: "512px",
+  width: "412px",
+  height: "312px",
   position: "relative",
+  color: "white"
+};
+
+const topLeftStyle = {
+  top: "5px",
+  left: "5px",
+  position: "absolute",
+  color: "white"
+};
+
+
+const topRightStyle = {
+  top: "5px",
+  right: "5px",
+  position: "absolute",
   color: "white"
 };
 
@@ -63,7 +88,6 @@ class CornerstoneElement extends React.Component {
 
   render() {
     return (
-      <div>
         <div
           className="viewportElement"
           style={divStyle}
@@ -75,13 +99,18 @@ class CornerstoneElement extends React.Component {
           }}
         >
           <canvas className="cornerstone-canvas" />
+          <div style={topLeftStyle}>
+            <span>Num Of Frames: </span><span id="numberOfFrames"></span><br></br>
+          </div>
+          <div style={topRightStyle}>
+            <span>Byte Length: </span><span id="fragments"></span><br />
+          </div>
           <div style={bottomLeftStyle}>Zoom: {this.state.viewport.scale}</div>
           <div style={bottomRightStyle}>
             WW/WC: {this.state.viewport.voi.windowWidth} /{" "}
             {this.state.viewport.voi.windowCenter}
           </div>
         </div>
-      </div>
     );
   }
 
@@ -111,6 +140,7 @@ class CornerstoneElement extends React.Component {
 
   componentDidMount() {
     const element = this.element;
+    console.log(Stack);
 
     // Enable the DOM Element for use with Cornerstone
     cornerstone.enable(element);
@@ -149,29 +179,37 @@ class CornerstoneElement extends React.Component {
           };
 
           Stack = stack;
+          // for(let i = 0; i < stack.ImageIds.length; i++) {
+          // }
           cornerstone.loadAndCacheImage(imageIds[0]).then(function(image) {
               console.log(image);
               cornerstoneWADOImageLoader.wadouri.dataSetCacheManager.unload(imageId);
-  
-              cornerstone.displayImage(element, image);
-              if(loaded === false) {
                   cornerstoneTools.wwwc.activate(element, 1); // ww/wc is the default tool for left mouse button
                   // Set the stack as tool state
                   cornerstoneTools.addStackStateManager(element, ['stack', 'playClip', 'stopClip']);
                   cornerstoneTools.addToolState(element, 'stack', stack);
                   // Start playing the clip
                   cornerstoneTools.playClip(element, FrameRate);
-                  loaded = true;
-              }
+              cornerstone.displayImage(element, image);
+              setTimeout(() => {
+                const det = document.querySelectorAll('#numberOfFrames');
+                const det2 = document.querySelectorAll('#fragments');
+                for(let i = 0; i < det.length; i++) {
+                  det[i].textContent = image.data.string('x00280008');
+                }
+                for(let i = 0; i < det2.length; i++) {
+                  det2[i].textContent = image.data.byteArray.byteLength;
+                  console.log(image.data.byteArray.byteLength)
+                }
+              }, 1500);
           }, function(err) {
               alert(err);
           });
 
-      console.log("react-cs: loadAndCacheImage imgframeRate:",this.state,this.initialViewport);
+      console.log("react-cs: loadAndCacheImage imgframeRate:",this.state,this.state.initialViewport);
 
       cornerstoneTools.mouseInput.enable(element);
       cornerstoneTools.mouseWheelInput.enable(element);
-      cornerstoneTools.wwwc.activate(element, 1); // ww/wc is the default tool for left mouse button
       cornerstoneTools.pan.activate(element, 2); // pan is the default tool for middle mouse button
       cornerstoneTools.zoom.activate(element, 4); // zoom is the default tool for right mouse button
       cornerstoneTools.zoomWheel.activate(element); // zoom is the default tool for middle mouse wheel
@@ -182,6 +220,10 @@ class CornerstoneElement extends React.Component {
       cornerstoneTools.zoomTouchPinch.activate(element);
 
       cornerstoneTools.stackScrollWheel.activate(element);
+      cornerstoneTools.stackPrefetch.setConfiguration({
+        maxImagesToPrefetch: Infinity,
+        preserveExistingPool: false,
+      });
 
       cornerstoneTools.stackPrefetch.enable(element);
       element.addEventListener("cornerstonenewimage", this.onNewImage);
@@ -203,7 +245,7 @@ class CornerstoneElement extends React.Component {
     cornerstone.disable(element);
   }
 
-  componentDidUpdate(prevProps, prevState) {
+  componentDidUpdate() {
     const stackData = cornerstoneTools.getToolState(this.element, "stack");
     const stack = stackData.data[0];
     stack.currentImageIdIndex = this.state.stack.currentImageIdIndex;
@@ -216,17 +258,13 @@ class CornerstoneElement extends React.Component {
 }
 
 let Stack = {
-  imageIds: [],
+  imageIds: ['dicomweb:http://localhost:3000/403.dcm'],
   currentImageIdIndex: 0
 };
 
-// const rate = {
-//   cineFrameRate: 1
-// }
-
 let State = {
-  activeViewportIndex: 0,
-  viewports: [0],
+  activeViewportIndex: 2,
+  viewports: [0, 1, 2, 3],
   tools: [
     // Mouse
     {
@@ -256,7 +294,12 @@ let State = {
     { name: 'ZoomTouchPinch', mode: 'active' },
     { name: 'StackScrollMultiTouch', mode: 'active' },
   ],
-  imageIds: [],
+  imageIds: [
+    Stack.imageIds[0],
+    Stack.imageIds[0],
+    Stack.imageIds[0],
+    Stack.imageIds[0],
+  ],
   // FORM
   activeTool: 'Wwwc',
   imageIdIndex: 0,
@@ -373,16 +416,25 @@ const App = () => {
           onPlayPauseChanged();
         }}
       />
-      <CornerstoneElement
-        key={0}
-        style={{ minWidth: '50%', height: '256px', flex: '1' }}
-        tools={State.tools}
-        imageIds={Stack.imageIds}
-        imageIdIndex={State.imageIdIndex}
-        isPlaying={State.isPlaying}
-        frameRate={State.frameRate}
-        stack={{ ...Stack }}
-      />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 33%)', width: '100vw', rowGap: '15px' }}>
+      {State.viewports.map(viewportIndex => (
+        <CornerstoneElement
+          key={viewportIndex}
+          style={{ minWidth: '50%', height: '256px', flex: '1' }}
+          tools={State.tools}
+          imageIds={Stack.imageIds}
+          imageIdIndex={State.imageIdIndex}
+          isPlaying={State.isPlaying}
+          frameRate={State.frameRate}
+          stack={{ ...Stack }}
+          className={State.activeViewportIndex === viewportIndex ? 'active' : ''}
+          activeTool={State.activeTool}
+          setViewportActive={() => {
+              State.activeViewportIndex = viewportIndex;
+          }}
+        />
+      ))}
+    </div>
     </div>
   );
 };
