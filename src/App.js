@@ -1,4 +1,4 @@
-import React, { useState, useContext } from "react";
+import React, { useState } from "react";
 import * as cornerstone from "cornerstone-core";
 import * as cornerstoneMath from "cornerstone-math";
 import * as cornerstoneTools from "cornerstone-tools";
@@ -6,16 +6,7 @@ import Hammer from "hammerjs";
 import * as cornerstoneWebImageLoader from "cornerstone-web-image-loader";
 import cornerstoneWADOImageLoader from "cornerstone-wado-image-loader";
 import { CineDialog } from 'react-viewerbase';
-import OHIF from '@ohif/core';
 import dicomParser from "dicom-parser";
-import cloneDeep from 'lodash.clonedeep';
-// import store from './store';
-// import { getActiveContexts } from './store/layout/selectors.js';
-// import cloneDeep from 'lodash.clonedeep';
-// import fs from 'fs';
-// import * as fs from 'fs';
-// import { ConnectedCineDialog } from "./components/Cine";
-// import file from './404.dcm';
 
 cornerstoneTools.external.cornerstone = cornerstone;
 cornerstoneTools.external.cornerstoneMath = cornerstoneMath;
@@ -23,15 +14,14 @@ cornerstoneWebImageLoader.external.cornerstone = cornerstone;
 cornerstoneWADOImageLoader.external.cornerstone = cornerstone;
 cornerstoneWADOImageLoader.external.dicomParser = dicomParser;
 cornerstoneTools.external.Hammer = Hammer;
+var loaded = false;
 
-// const fs = require('fs');
-// const dicomFileAsBuffer = fs.readFileSync('404.dcm', {
-//   encoding: 'utf8',
-// });
-// cornerstoneWADOImageLoader.wadouri.fileManager.add(dicomFileAsBuffer)
-
-const url = window.location.origin;
-const imageId = `dicomweb:${url}/404.dcm`;
+cornerstoneWADOImageLoader.configure({
+  beforeSend: function(xhr) {
+      // Add custom headers here (e.g. auth tokens)
+      //xhr.setRequestHeader('x-auth-token', 'my auth token');
+  }
+});
 
 const divStyle = {
   width: "512px",
@@ -125,65 +115,59 @@ class CornerstoneElement extends React.Component {
     // Enable the DOM Element for use with Cornerstone
     cornerstone.enable(element);
 
-    // Load the first image in the stack
-    cornerstone.loadImage(this.state.imageId).then(image => {
-      function metaDataProvider(type, imageId) {
-      if (type === 'cineModule') {
-        if (imageId === image.imageId) {
-            return {
-                frameOfReferenceUID: "1.3.6.1.4.1.5962.99.1.2237260787.1662717184.1234892907507.1411.0",
-                rows: 512,
-                columns: 512,
-                rowCosines: {
-                    x: 1,
-                    y: 0,
-                    z: 0
-                },
-                columnCosines: {
-                    x: 0,
-                    y: 1,
-                    z: 0
-                },
-                imagePositionPatient: {
-                    x: -250,
-                    y: -250,
-                    z: -399.100006
-                },
-                rowPixelSpacing: 0.976562,
-                columnPixelSpacing: 0.976562
-            };
-        }
-      }
-    }
-    // Register this provider with CornerstoneJS
-      cornerstone.metaData.addProvider(metaDataProvider);
-      const cine = cornerstone.metaData.get('cineModule',image.imageId);
-      console.log(cine)
+      console.log("react-cs: loadAndCacheImage imgframeRate:",this.state,this.initialViewport);
+
+      const loc = window.location.origin;
+      const url = `${loc}/0002.DCM`;
+      
+      console.log(url);
+      // since this is a multi-frame example, we need to load the DICOM SOP Instance into memory and parse it
+      // so we know the number of frames it has so we can create the stack.  Calling load() will increment the reference
+      // count so it will stay in memory until unload() is explicitly called and all other reference counts
+      // held by the cornerstone cache are gone.  See below for more info
+      cornerstoneWADOImageLoader.wadouri.dataSetCacheManager.load(url, cornerstoneWADOImageLoader.internal.xhrRequest).then(function(dataSet) {
+          // dataset is now loaded, get the # of frames so we can build the array of imageIds
+          var numFrames = dataSet.intString('x00280008');
+          var FrameRate = State.frameRate;
+          if(!numFrames) {
+              alert('Missing element NumberOfFrames (0028,0008)');
+              return;
+          }
+  
+          var imageIds = [];
+          var imageIdRoot = 'wadouri:' + url;
+  
+          for(var i=0; i < numFrames; i++) {
+              var imageId = imageIdRoot + "?frame="+i;
+              State.imageIds.push(imageId);
+              imageIds.push(imageId);
+          }
+  
+          var stack = {
+              currentImageIdIndex : 0,
+              imageIds: imageIds
+          };
+
+          Stack = stack;
+          cornerstone.loadAndCacheImage(imageIds[0]).then(function(image) {
+              console.log(image);
+              cornerstoneWADOImageLoader.wadouri.dataSetCacheManager.unload(imageId);
+  
+              cornerstone.displayImage(element, image);
+              if(loaded === false) {
+                  cornerstoneTools.wwwc.activate(element, 1); // ww/wc is the default tool for left mouse button
+                  // Set the stack as tool state
+                  cornerstoneTools.addStackStateManager(element, ['stack', 'playClip', 'stopClip']);
+                  cornerstoneTools.addToolState(element, 'stack', stack);
+                  // Start playing the clip
+                  cornerstoneTools.playClip(element, FrameRate);
+                  loaded = true;
+              }
+          }, function(err) {
+              alert(err);
+          });
 
       console.log("react-cs: loadAndCacheImage imgframeRate:",this.state,this.initialViewport);
-      cornerstone.displayImage(this.element, image, this.initialViewport);
-//          if (cine.frameTime) {
-      if (true) {
-        let imageIds = [];
-        for(let i=0; i < cine.numFrames; i++) {
-            let frameurl = imageId + "?frame="+i;
-            imageIds.push(frameurl);
-        }
-        let stack = {
-          currentImageIdIndex : 0,
-          imageIds: imageIds
-        };
-        cornerstoneTools.addStackStateManager(this.element, ['stack', 'playClip']);
-        cornerstoneTools.addToolState(this.element, 'stack', stack);
-
-        console.log()
-        const dat = { frameRate: 1000.0 / rate.cineFrameRate, isPlaying:true, shouldStart:true };
-        console.log("react-cs: loadAndCacheImage setState:",dat);
-        console.log("react-cs: playClip:",dat.frameRate);
-        // debugger;
-        cornerstoneTools.playClip(this.element, dat.frameRate);
-        cornerstoneTools.stopClip(this.element);
-      }
 
       cornerstoneTools.mouseInput.enable(element);
       cornerstoneTools.mouseWheelInput.enable(element);
@@ -192,14 +176,14 @@ class CornerstoneElement extends React.Component {
       cornerstoneTools.zoom.activate(element, 4); // zoom is the default tool for right mouse button
       cornerstoneTools.zoomWheel.activate(element); // zoom is the default tool for middle mouse wheel
 
+
       cornerstoneTools.touchInput.enable(element);
       cornerstoneTools.panTouchDrag.activate(element);
       cornerstoneTools.zoomTouchPinch.activate(element);
 
-      element.addEventListener(
-        "cornerstoneimagerendered",
-        this.onImageRendered
-      );
+      cornerstoneTools.stackScrollWheel.activate(element);
+
+      cornerstoneTools.stackPrefetch.enable(element);
       element.addEventListener("cornerstonenewimage", this.onNewImage);
       window.addEventListener("resize", this.onWindowResize);
     });
@@ -226,27 +210,19 @@ class CornerstoneElement extends React.Component {
     stack.imageIds = this.state.stack.imageIds;
     cornerstoneTools.addToolState(this.element, "stack", stack);
 
-    //const imageId = stack.imageIds[stack.currentImageIdIndex];
-    //cornerstoneTools.scrollToIndex(this.element, stack.currentImageIdIndex);
+    // const imageId = stack.imageIds[stack.currentImageIdIndex];
+    cornerstoneTools.scrollToIndex(this.element, stack.currentImageIdIndex);
   }
 }
 
-console.log(element);
-// let isPlaying = false;
-  // element = document.querySelectorAll(".viewportElement");
-  // console.log(element);
-  // for (let i = 0; i < element.length; i++) {
-  //   cornerstone.enable(element[i]);
-  // }
-
-const stack = {
-  imageIds: [imageId],
+let Stack = {
+  imageIds: [],
   currentImageIdIndex: 0
 };
 
-const rate = {
-  cineFrameRate: 30
-}
+// const rate = {
+//   cineFrameRate: 1
+// }
 
 let State = {
   activeViewportIndex: 0,
@@ -280,7 +256,7 @@ let State = {
     { name: 'ZoomTouchPinch', mode: 'active' },
     { name: 'StackScrollMultiTouch', mode: 'active' },
   ],
-  imageIds: [imageId],
+  imageIds: [],
   // FORM
   activeTool: 'Wwwc',
   imageIdIndex: 0,
@@ -290,17 +266,17 @@ let State = {
 
 const App = () => {
   const [state, setState] = useState({
-    "isPlaying": true,
-    "cineFrameRate": 30,
-    "isLoopEnabled": true,
-    "lastChange": ""
+    isPlaying: true,
+    cineFrameRate: State.frameRate,
+    isLoopEnabled: true,
+    lastChange: "",
   });
 
-  const { setViewportSpecificData } = OHIF.redux.actions;
+  // const { setViewportSpecificData } = OHIF.redux.actions;
 
   function metaDataProvider(type, imageId) {
     if (type === 'cineModule') {
-      if (imageId === stack.imageId) {
+      if (imageId === Stack.imageId) {
           return {
               frameOfReferenceUID: "1.3.6.1.4.1.5962.99.1.2237260787.1662717184.1234892907507.1411.0",
               rows: 512,
@@ -327,85 +303,43 @@ const App = () => {
     }
   }
 
-    const setPlayClip = (e) => {
+    const setPlayClip = () => {
       state.isPlaying = true;
       cornerstone.metaData.addProvider(metaDataProvider);
-      const cine = cornerstone.metaData.get('cineModule', stack.imageId);
-      cine.isPlaying = state.isPlaying;
-      console.log(element);
-      cornerstone.invalidate(element);
-      cornerstone.draw(element);
+      const cine = cornerstone.metaData.get('cineModule', Stack.imageId);
+      cine.isPlaying = !state.isPlaying;
+      cornerstoneTools.playClip(element, state.cineFrameRate)
     };
 
-    const setStopClip = (e) => {
+    const setStopClip = () => {
       state.isPlaying = false;
       cornerstone.metaData.addProvider(metaDataProvider);
-      const cine = cornerstone.metaData.get('cineModule', stack.imageId);
-      cine.isPlaying = state.isPlaying;
+      const cine = cornerstone.metaData.get('cineModule', Stack.imageId);
+      cine.isPlaying = !state.isPlaying;
+      console.log(element);
+      cornerstoneTools.stopClip(element);
+      // loaded = false;
     };
 
     const onPlayPauseChanged = () => {
-    // Register this provider with CornerstoneJS
-    setTimeout(() => {
-      const viewport = {
-        invert: false,
-        pixelReplication: false,
-        voi: {
-          windowWidth: 400,
-          windowCenter: 200
-        },
-        scale: 1.4,
-        translation: {
-          x: 0,
-          y: 0
-        },
-        //colormap: 'hot'
-      };
-      setViewportSpecificData(element, viewport)
       cornerstone.metaData.addProvider(metaDataProvider);
-      const cine = cornerstone.metaData.get('cineModule', stack.imageId);
-      const cineData = cine || {
-        isPlaying: true,
-        cineFrameRate: 30,
-      };
-      const cin = cloneDeep(cineData);
-      cin.isPlaying = !state.isPlaying;
-      console.log(state.isPlaying);
-      // propsFromDispatch.dispatchSetViewportSpecificData(activeViewportIndex, {
-      //   cine,
-      // });
-        setViewportSpecificData(stack.currentImageIdIndex, {
-          cin,
-        });
-        console.log(
-          setViewportSpecificData(stack.currentImageIdIndex, {
-          cin,
-        })
-        )
-    }, 500);
+      const cine = cornerstone.metaData.get('cineModule', Stack.imageId);
+      cine.isPlaying = state.isPlaying;
+      console.log(cine);
+        if (state.isPlaying) {
+          cornerstoneTools.playClip(element, cine.cineFrameRate)
+        } else {
+          cornerstoneTools.stopClip(element);
+        }
     };
 
-  const onFrameRateChanged = (frameRate) => {
+  const onFrameRateChanged = () => {
   // Register this provider with CornerstoneJS
     cornerstone.metaData.addProvider(metaDataProvider);
-    const cine = cornerstone.metaData.get('cineModule', stack.imageId);
-    rate.cineFrameRate = frameRate;
-    cine.cineFrameRate = frameRate;
-
-    // propsFromDispatch.dispatchSetViewportSpecificData(activeViewportIndex, {
-    //   cine,
-    // });
-      setViewportSpecificData(stack.currentImageIdIndex, {
-      cine,
-    });
+    const cine = cornerstone.metaData.get('cineModule', Stack.imageId);
+    cine.cineFrameRate = State.frameRate;
+    console.log(cine);
   };
-
-  let AppContext = React.createContext({});
-
-  const useAppContext = () => useContext(AppContext);
-
-
-  const { appConfig, activeContexts } = useAppContext();
 
   return (
     <div>
@@ -428,11 +362,14 @@ const App = () => {
         onClickBackButton={() => setState({ lastChange: 'Clicked Back' })}
         onLoopChanged={(value) => setState({ isLoopEnabled: value })}
         onFrameRateChanged={(value) => {
-          onFrameRateChanged(value);
-          setState({ cineFrameRate: value });
+          State.frameRate = value;
+          state.cineFrameRate = value;
+          onFrameRateChanged();
         }}
         onPlayPauseChanged={() => {
-          setState({ isPlaying: !state.isPlaying });
+          state.isPlaying = !state.isPlaying;
+          state.isLoopEnabled = !state.isLoopEnabled;
+          console.log(state.isPlaying)
           onPlayPauseChanged();
         }}
       />
@@ -440,18 +377,11 @@ const App = () => {
         key={0}
         style={{ minWidth: '50%', height: '256px', flex: '1' }}
         tools={State.tools}
-        imageIds={State.imageIds}
+        imageIds={Stack.imageIds}
         imageIdIndex={State.imageIdIndex}
         isPlaying={State.isPlaying}
         frameRate={State.frameRate}
-        className={State.activeViewportIndex === 0 ? 'active' : ''}
-        activeTool={State.activeTool}
-        setViewportActive={() => {
-          State.activeViewportIndex = 0;
-        }}
-        appConfig={appConfig}
-        activeContexts={activeContexts}
-        stack={{ ...stack }}
+        stack={{ ...Stack }}
       />
     </div>
   );
